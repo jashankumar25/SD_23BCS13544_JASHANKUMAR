@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nginx Load Balancer Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: rgba(30, 41, 59, 0.7);
+            --primary: #8b5cf6;
+            --secondary: #3b82f6;
+            --success: #10b981;
+            --alert: #ef4444;
+            --text: #f8fafc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+            margin-bottom: 10px;
+            letter-spacing: -1px;
+        }
+
+        p.subtitle {
+            color: #94a3b8;
+            font-size: 1.1rem;
+        }
+
+        .dashboard {
+            width: 100%;
+            max-width: 900px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+        }
+
+        .glass-panel {
+            background: var(--surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        button {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px rgba(139, 92, 246, 0.5);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            background: #475569;
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 15px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-title {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: white;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .servers-monitor {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .server-box {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .server-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+        }
+
+        .server-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .server-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .server-count {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            width: 0%;
+            transition: width 0.1s ease-out;
+        }
+
+        .pulse {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: var(--success);
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse-animation 2s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+
+        .log-container {
+            margin-top: 30px;
+            background: #020617;
+            border-radius: 10px;
+            padding: 15px;
+            height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #10b981;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-line {
+            margin-bottom: 4px;
+        }
+
+        .log-error {
+            color: #ef4444;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>Nginx Traffic Visualizer</h1>
+        <p class="subtitle">Live Experiment 6 Load Balancing Dashboard</p>
+    </header>
+
+    <div class="dashboard">
+        <div class="glass-panel">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title">Total Requests</div>
+                    <div class="stat-value" id="val-total">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Successful</div>
+                    <div class="stat-value" id="val-success" style="color: var(--success)">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Failed</div>
+                    <div class="stat-value" id="val-failed" style="color: var(--alert)">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Time (s)</div>
+                    <div class="stat-value" id="val-time" style="color: #cbd5e1">0.0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Throughput</div>
+                    <div class="stat-value" id="val-throughput" style="color: #cbd5e1">0 req/s</div>
+                </div>
+            </div>
+
+            <div class="servers-monitor">
+                <div class="server-box" id="node-3000">
+                    <div class="server-header">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="pulse"></div>
+                            <span class="server-name">Server Node: 3000</span>
+                        </div>
+                        <span class="server-count" id="count-3000">0</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="bar-3000"></div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #94a3b8">Load Distribution</div>
+                </div>
+
+                <div class="server-box" id="node-3001">
+                    <div class="server-header">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="pulse"></div>
+                            <span class="server-name">Server Node: 3001</span>
+                        </div>
+                        <span class="server-count" id="count-3001">0</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="bar-3001"
+                            style="background: linear-gradient(90deg, #10b981, #3b82f6)"></div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #94a3b8">Load Distribution</div>
+                </div>
+            </div>
+
+            <div class="controls" style="margin-top: 30px;">
+                <button id="btn-start" onclick="startLoadTest()">🚀 Fire 200 Requests Mode</button>
+                <button id="btn-reset" onclick="resetUI()"
+                    style="background: transparent; border: 1px solid rgba(255,255,255,0.2);">Reset Counters</button>
+            </div>
+
+            <div class="log-container" id="logs">
+                <div class="log-line">System ready. Waiting for load test...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const NGINX_URL = "http://localhost:8080/api/v1/playlists/PL100";
+        const MAX_REQUESTS = 200;
+
+        let stats = {
+            total: 0,
+            success: 0,
+            failed: 0,
+            srv3000: 0,
+            srv3001: 0
+        };
+
+        let startTime = 0;
+
+        function addLog(msg, isError = false) {
+            const logs = document.getElementById('logs');
+            const div = document.createElement('div');
+            div.className = isError ? 'log-line log-error' : 'log-line';
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logs.appendChild(div);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function updateUI() {
+            document.getElementById('val-total').textContent = stats.total;
+            document.getElementById('val-success').textContent = stats.success;
+            document.getElementById('val-failed').textContent = stats.failed;
+
+            document.getElementById('count-3000').textContent = stats.srv3000;
+            document.getElementById('count-3001').textContent = stats.srv3001;
+
+            // Target max dynamically based on Total
+            let maxExpected = Math.max(MAX_REQUESTS / 2, Math.max(stats.srv3000, stats.srv3001));
+            if (maxExpected === 0) maxExpected = 1;
+
+            document.getElementById('bar-3000').style.width = Math.min(100, (stats.srv3000 / maxExpected) * 100) + '%';
+            document.getElementById('bar-3001').style.width = Math.min(100, (stats.srv3001 / maxExpected) * 100) + '%';
+        }
+
+        function resetUI() {
+            stats = { total: 0, success: 0, failed: 0, srv3000: 0, srv3001: 0 };
+            document.getElementById('val-time').textContent = "0.0";
+            document.getElementById('val-throughput').textContent = "0 req/s";
+            updateUI();
+            document.getElementById('logs').innerHTML = '<div class="log-line">System ready. Waiting for load test...</div>';
+            document.getElementById('btn-start').disabled = false;
+        }
+
+        async function makeRequest() {
+            try {
+                // Add timestamp to bypass local caching visually nicely if needed
+                const res = await fetch(NGINX_URL + "?bust=" + new Date().getTime(), {
+                    method: 'GET'
+                });
+
+                if (res.ok) {
+                    const data = await res.text();
+                    stats.success++;
+
+                    if (data.includes("PORT 3000")) {
+                        stats.srv3000++;
+                    } else if (data.includes("PORT 3001")) {
+                        stats.srv3001++;
+                    }
+                } else {
+                    stats.failed++;
+                    addLog(`Request failed with status: ${res.status}`, true);
+                }
+            } catch (err) {
+                stats.failed++;
+                addLog(`Network Error: Ensure Nginx and Servers are running!`, true);
+            } finally {
+                stats.total++;
+                if (stats.total > 0 && stats.total % 10 === 0) {
+                    addLog(`Batch handled successfully. Router tracking: 3000(${stats.srv3000}) | 3001(${stats.srv3001})`);
+                }
+                updateUI();
+            }
+        }
+
+        async function startLoadTest() {
+            document.getElementById('btn-start').disabled = true;
+            addLog("Initiating high-throughput traffic load...");
+            startTime = performance.now();
+
+            // To not instantly block the UI thread, we batch our requests
+            const BATCH_SIZE = 10;
+            const BATCHES = MAX_REQUESTS / BATCH_SIZE;
+
+            for (let b = 0; b < BATCHES; b++) {
+                let promises = [];
+                for (let i = 0; i < BATCH_SIZE; i++) {
+                    promises.push(makeRequest());
+                }
+                await Promise.all(promises);
+
+                // Calculate step-by-step Time and Throughput
+                let currentTime = performance.now();
+                let timeSoFarMs = currentTime - startTime;
+                let timeSoFarS = (timeSoFarMs / 1000).toFixed(2);
+                let currentThroughput = (stats.total / (timeSoFarMs / 1000)).toFixed(0);
+
+                document.getElementById('val-time').textContent = timeSoFarS;
+                document.getElementById('val-throughput').textContent = currentThroughput + " req/s";
+
+                await new Promise(r => setTimeout(r, 50));
+            }
+
+            addLog(`✔️ Load test complete. Throughput achieved: ${document.getElementById('val-throughput').textContent}`);
+            document.getElementById('btn-start').disabled = false;
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,3 @@
+cd "\Users\Lenovo\Downloads\system design\Experiment6_PlaylistREST_API\src"
+javac Main.java model\*.java service\*.java controller\*.java strategy\*.java
+java Main
