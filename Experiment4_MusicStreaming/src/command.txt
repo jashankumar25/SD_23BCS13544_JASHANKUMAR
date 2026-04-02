@@ -1,0 +1,3 @@
+cd "\Users\Lenovo\Downloads\system design\Experiment4_MusicStreaming\src"
+javac Main.java model\*.java factory\*.java observer\*.java strategy\*.java singleton\*.java
+java Main

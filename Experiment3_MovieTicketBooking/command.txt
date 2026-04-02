@@ -1,0 +1,3 @@
+cd "\Users\Lenovo\Downloads\system design\Experiment3_MovieTicketBooking\src"
+javac Main.java model\*.java factory\*.java observer\*.java strategy\*.java service\*.java
+java Main

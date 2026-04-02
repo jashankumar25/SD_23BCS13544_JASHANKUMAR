@@ -1,0 +1,3 @@
+cd "\Users\Lenovo\Downloads\system design\Experiment5_NetworkSimulation\src"
+javac Main.java model\*.java network\*.java
+java Main
