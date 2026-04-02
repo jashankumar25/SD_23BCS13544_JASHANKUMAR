@@ -1,5 +1,11 @@
 # 🏗️ System Design Experiments Collection
 
+![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=java&logoColor=white) 
+![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white)
+![System Design](https://img.shields.io/badge/System_Design-00599c?style=for-the-badge)
+![Load Balancing](https://img.shields.io/badge/Load_Balancing-8B5CF6?style=for-the-badge)
+![Concurrency](https://img.shields.io/badge/Concurrency-10B981?style=for-the-badge)
+
 Welcome to the **System Design Experiments Collection**! This repository is a curated suite of projects built from the ground up to explore, implement, and test core software engineering principles, system architecture patterns, and DevOps networking concepts.
 
 Everything in this repository is built natively with core Java (no heavy abstractions like Spring Boot) to provide a deep, foundational understanding of how these systems work under the hood.
@@ -59,6 +65,11 @@ For example, to launch the full-stack load balancing visualizer in **Experiment 
    ```
 *(Make sure Nginx is configured in your local environment prior to executing proxy-based experiments).*
 
+## 👤 Author
+
+Developed by **Jashan Kumar** ([@jashankumar25](https://github.com/jashankumar25))
+
 ## 📜 License
 
 This system design repository and its internal experiment modules are licensed under the MIT License.
+"# SD_23BCS13544_JASHANKUMAR" 
