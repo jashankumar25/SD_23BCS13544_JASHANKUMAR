@@ -14,6 +14,12 @@ Everything in this repository is built natively with core Java (no heavy abstrac
 
 ## 📂 Experiments Overview
 
+### 🎟️ [Experiment 2: Object-Oriented Movie Ticket Booking System](./Experiment2_MovieTicketBooking)
+**Focus:** *Object-Oriented Design, Classes, Relationships (Association, Aggregation, Composition).*
+- Implements a foundational Movie Ticket Booking System.
+- Manages movies, shows, seats, and bookings.
+- Demonstrates structural relationships between domains through clean Java code.
+
 ### 🎬 [Experiment 3: Movie Ticket Booking](./Experiment3_MovieTicketBooking)
 **Focus:** *Concurrency, Domain Modeling, and Object-Oriented Design.*
 - Simulates a theater booking platform.
