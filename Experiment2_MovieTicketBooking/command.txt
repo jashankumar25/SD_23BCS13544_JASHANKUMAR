@@ -1,0 +1,1 @@
+cd Experiment2_MovieTicketBooking && javac -d out src/model/*.java src/Main.java && java -cp out Main
