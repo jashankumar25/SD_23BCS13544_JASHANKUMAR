@@ -1,0 +1,441 @@
+{
+  "info": {
+    "_postman_id": "exp7-playlist-service",
+    "name": "🎵 Playlist & Recommendation Service",
+    "description": "Complete API collection for the Scalable Playlist & Recommendation Service.\n\nIncludes:\n- Playlist CRUD\n- Redis Cache-Aside demo (Cache MISS → Cache HIT)\n- Recommendations (Genre & Popularity Strategy)\n- Rate Limiting (429) test\n- Observer Pattern (Cache Invalidation) demo\n\nServer: http://localhost:3000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "PLAYLIST_ID",
+      "value": "",
+      "type": "string",
+      "description": "Auto-filled after running POST /playlist"
+    }
+  ],
+  "item": [
+    {
+      "name": "🟢 Health Check",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["health"]
+            },
+            "description": "Checks if the server is running.\n\nExpected Response:\n- Status: 200 OK\n- Body: {\"status\": \"OK\"}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status is OK', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('OK');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📋 Playlist CRUD",
+      "item": [
+        {
+          "name": "POST /playlist — Create Playlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Postman Playlist\",\n  \"ownerId\": \"user-postman\",\n  \"genres\": [\"Pop\", \"Rock\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/playlist",
+              "host": ["{{BASE_URL}}"],
+              "path": ["playlist"]
+            },
+            "description": "Creates a new playlist in MongoDB.\n\nExpected Response:\n- Status: 201 Created\n- Body: Full playlist object with _id\n\nNote: The test script auto-saves the _id to {{PLAYLIST_ID}} for use in subsequent requests."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Response has _id', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json._id).to.be.a('string');",
+                  "  pm.collectionVariables.set('PLAYLIST_ID', json._id);",
+                  "  console.log('Saved PLAYLIST_ID:', json._id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /playlist/:id — Cache MISS (1st Request)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/playlist/{{PLAYLIST_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["playlist", "{{PLAYLIST_ID}}"]
+            },
+            "description": "Fetches a playlist by ID.\n\nThis is the FIRST request — data is fetched from MongoDB.\n\nExpected Response:\n- Status: 200 OK\n- Server log: 'Cache Miss for playlist:...'\n- Response time: ~15-25ms"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time logged (Cache MISS ~ 15-25ms)', () => {",
+                  "  console.log('Response time:', pm.response.responseTime + 'ms (Cache MISS - MongoDB)');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /playlist/:id — Cache HIT (2nd Request)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/playlist/{{PLAYLIST_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["playlist", "{{PLAYLIST_ID}}"]
+            },
+            "description": "Fetches the SAME playlist again.\n\nThis is the SECOND request — data is served from Redis cache.\n\nExpected Response:\n- Status: 200 OK\n- Server log: 'Cache Hit for playlist:...'\n- Response time: ~2-5ms (10x faster!)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time logged (Cache HIT ~ 2-5ms)', () => {",
+                  "  console.log('Response time:', pm.response.responseTime + 'ms (Cache HIT - Redis)');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT /playlist/:id — Update (Invalidates Cache)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Postman Playlist\",\n  \"genres\": [\"Jazz\", \"Blues\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/playlist/{{PLAYLIST_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["playlist", "{{PLAYLIST_ID}}"]
+            },
+            "description": "Updates the playlist in MongoDB.\n\nOBSERVER PATTERN fires automatically:\n- PlaylistSubject.notify('PLAYLIST_UPDATED')\n- CacheInvalidator deletes Redis key\n\nExpected Response:\n- Status: 200 OK\n- Server log: 'Cache invalidated for playlist:...'\n- Body: Updated playlist with new name and genres"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Name was updated', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.name).to.eql('Updated Postman Playlist');",
+                  "  console.log('Observer fired: Redis cache should now be cleared');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /playlist/:id — Delete Playlist",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/playlist/{{PLAYLIST_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["playlist", "{{PLAYLIST_ID}}"]
+            },
+            "description": "Deletes the playlist from MongoDB.\n\nOBSERVER PATTERN fires:\n- Cache key is deleted from Redis\n\nExpected Response:\n- Status: 204 No Content\n- Server log: 'Cache invalidated for playlist:...'"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 204 No Content', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('PLAYLIST_ID', '');",
+                  "console.log('Playlist deleted. Redis cache cleared by Observer.');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🎯 Recommendations",
+      "item": [
+        {
+          "name": "GET /recommendations — Popularity Strategy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=popularity&limit=5",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [
+                { "key": "type", "value": "popularity" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "Returns top 5 songs sorted by popularity score.\n\nSTRATEGY PATTERN: PopularityStrategy selected at runtime.\n\nExpected Response:\n- Status: 200 OK\n- Body: Array of songs sorted by popularity (Bohemian Rhapsody first with score 98)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array of songs', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.be.an('array');",
+                  "  pm.expect(json.length).to.be.greaterThan(0);",
+                  "  console.log('Top song:', json[0].title, '| Popularity:', json[0].popularity);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /recommendations — Genre Strategy (Pop & Rock)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=genre&genres=Pop,Rock&limit=5",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [
+                { "key": "type", "value": "genre" },
+                { "key": "genres", "value": "Pop,Rock" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "Returns songs filtered by genres Pop and Rock.\n\nSTRATEGY PATTERN: GenreStrategy selected at runtime.\nMongoDB Query: Song.find({ genre: { $in: ['Pop','Rock'] } })\n\nExpected Response:\n- Status: 200 OK\n- Body: Array of Pop and Rock songs only"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('All songs are Pop or Rock', () => {",
+                  "  const json = pm.response.json();",
+                  "  json.forEach(song => {",
+                  "    pm.expect(['Pop', 'Rock']).to.include(song.genre);",
+                  "  });",
+                  "  console.log('Genre Strategy returned', json.length, 'songs');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /recommendations — Genre Strategy (Hip Hop)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=genre&genres=Hip Hop&limit=5",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [
+                { "key": "type", "value": "genre" },
+                { "key": "genres", "value": "Hip Hop" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "Returns songs filtered by Hip Hop genre.\n\nExpected Response:\n- Status: 200 OK\n- Body: [Gods Plan by Drake]"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🚦 Rate Limiting Tests",
+      "item": [
+        {
+          "name": "Rate Limit — Request 1 (200 OK)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=popularity",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [{ "key": "type", "value": "popularity" }]
+            },
+            "description": "Request 1 of 6 — should return 200 OK"
+          },
+          "response": []
+        },
+        {
+          "name": "Rate Limit — Request 2 (200 OK)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=popularity",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [{ "key": "type", "value": "popularity" }]
+            },
+            "description": "Request 2 of 6 — should return 200 OK"
+          },
+          "response": []
+        },
+        {
+          "name": "Rate Limit — Request 3 (200 OK)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=popularity",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [{ "key": "type", "value": "popularity" }]
+            },
+            "description": "Request 3 of 6 — should return 200 OK"
+          },
+          "response": []
+        },
+        {
+          "name": "Rate Limit — Request 4 (200 OK)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=popularity",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [{ "key": "type", "value": "popularity" }]
+            },
+            "description": "Request 4 of 6 — should return 200 OK"
+          },
+          "response": []
+        },
+        {
+          "name": "Rate Limit — Request 5 (200 OK)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=popularity",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [{ "key": "type", "value": "popularity" }]
+            },
+            "description": "Request 5 of 6 — should return 200 OK (last allowed)"
+          },
+          "response": []
+        },
+        {
+          "name": "Rate Limit — Request 6 (429 TOO MANY REQUESTS !!!)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/recommendations?type=popularity",
+              "host": ["{{BASE_URL}}"],
+              "path": ["recommendations"],
+              "query": [{ "key": "type", "value": "popularity" }]
+            },
+            "description": "Request 6 of 6 — RATE LIMIT HIT!\n\nExpected Response:\n- Status: 429 Too Many Requests\n- Body: { \"status\": 429, \"error\": \"Too Many Requests\", \"message\": \"You have exceeded the 5 requests per minute limit.\" }"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Rate limit triggered - 429', () => pm.response.to.have.status(429));",
+                  "pm.test('Error message correct', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.error).to.eql('Too Many Requests');",
+                  "  console.log('Rate limit message:', json.message);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

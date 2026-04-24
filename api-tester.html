@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Playlist API Tester</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; }
+  header { background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px 30px; border-bottom: 1px solid #ff6b35; display: flex; align-items: center; gap: 15px; }
+  header h1 { font-size: 1.4rem; color: #ff6b35; }
+  header span { background: #ff6b35; color: #fff; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; }
+  .container { display: grid; grid-template-columns: 280px 1fr; height: calc(100vh - 65px); }
+  .sidebar { background: #12121f; border-right: 1px solid #2a2a3e; overflow-y: auto; }
+  .sidebar h3 { padding: 15px; font-size: 0.75rem; color: #888; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #2a2a3e; }
+  .endpoint { padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #1e1e30; transition: background 0.2s; display: flex; align-items: center; gap: 10px; }
+  .endpoint:hover { background: #1a1a2e; }
+  .endpoint.active { background: #1e1e35; border-left: 3px solid #ff6b35; }
+  .method { font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; min-width: 45px; text-align: center; }
+  .GET    { background: #1a4731; color: #4ade80; }
+  .POST   { background: #3d2b00; color: #fb923c; }
+  .PUT    { background: #1e2a4a; color: #60a5fa; }
+  .DELETE { background: #3d1a1a; color: #f87171; }
+  .ep-name { font-size: 0.82rem; }
+  .main { display: flex; flex-direction: column; }
+  .request-panel { padding: 20px; border-bottom: 1px solid #2a2a3e; background: #12121f; }
+  .url-bar { display: flex; gap: 10px; margin-bottom: 15px; }
+  .method-select { background: #1e1e30; border: 1px solid #3a3a5c; color: #e0e0e0; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; }
+  .url-input { flex: 1; background: #1e1e30; border: 1px solid #3a3a5c; color: #e0e0e0; padding: 8px 14px; border-radius: 6px; font-size: 0.9rem; }
+  .send-btn { background: #ff6b35; color: #fff; border: none; padding: 8px 22px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: background 0.2s; }
+  .send-btn:hover { background: #e5521c; }
+  .send-btn:disabled { background: #555; cursor: not-allowed; }
+  .body-section { margin-top: 4px; }
+  .body-section label { font-size: 0.8rem; color: #888; margin-bottom: 6px; display: block; }
+  .body-textarea { width: 100%; background: #1e1e30; border: 1px solid #3a3a5c; color: #a8d8a8; padding: 10px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.83rem; resize: vertical; min-height: 80px; }
+  .response-panel { flex: 1; overflow-y: auto; padding: 20px; }
+  .response-header { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; }
+  .status-badge { padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; }
+  .s200, .s201 { background: #1a4731; color: #4ade80; }
+  .s204 { background: #1a3040; color: #7dd3fc; }
+  .s429 { background: #3d1a1a; color: #f87171; }
+  .s500 { background: #3d2000; color: #fb923c; }
+  .time-badge { font-size: 0.8rem; color: #888; }
+  .cache-badge { font-size: 0.75rem; padding: 3px 10px; border-radius: 20px; }
+  .cache-hit  { background: #1a4731; color: #4ade80; }
+  .cache-miss { background: #3d2b00; color: #fb923c; }
+  .response-body { background: #0d0d18; border: 1px solid #2a2a3e; border-radius: 8px; padding: 16px; font-family: 'Courier New', monospace; font-size: 0.83rem; white-space: pre-wrap; word-break: break-all; line-height: 1.6; max-height: 380px; overflow-y: auto; }
+  .key   { color: #7dd3fc; }
+  .str   { color: #a8d8a8; }
+  .num   { color: #fb923c; }
+  .bool  { color: #c084fc; }
+  .null  { color: #888; }
+  .history { margin-top: 20px; }
+  .history h4 { font-size: 0.8rem; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .hist-item { background: #12121f; border: 1px solid #2a2a3e; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.82rem; display: flex; align-items: center; gap: 10px; }
+  .placeholder { color: #555; font-size: 0.9rem; margin-top: 60px; text-align: center; }
+  .spinner { display: none; width: 18px; height: 18px; border: 2px solid #555; border-top-color: #ff6b35; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .rate-limit-bar { background: #1e1e30; border-radius: 6px; height: 6px; margin-top: 8px; overflow: hidden; }
+  .rate-limit-fill { height: 100%; background: #ff6b35; transition: width 0.3s; border-radius: 6px; }
+  .info-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎵 Playlist Service — API Tester</h1>
+  <span>Live · localhost:3000</span>
+  <span id="serverStatus" style="background:#555">Checking...</span>
+</header>
+<div class="container">
+  <div class="sidebar">
+    <h3>Endpoints</h3>
+    <div class="endpoint active" onclick="loadEndpoint('health')">
+      <span class="method GET">GET</span><span class="ep-name">/health</span>
+    </div>
+    <div class="endpoint" onclick="loadEndpoint('createPlaylist')">
+      <span class="method POST">POST</span><span class="ep-name">/playlist</span>
+    </div>
+    <div class="endpoint" onclick="loadEndpoint('getPlaylist')">
+      <span class="method GET">GET</span><span class="ep-name">/playlist/:id</span>
+    </div>
+    <div class="endpoint" onclick="loadEndpoint('updatePlaylist')">
+      <span class="method PUT">PUT</span><span class="ep-name">/playlist/:id</span>
+    </div>
+    <div class="endpoint" onclick="loadEndpoint('deletePlaylist')">
+      <span class="method DELETE">DELETE</span><span class="ep-name">/playlist/:id</span>
+    </div>
+    <div class="endpoint" onclick="loadEndpoint('recPopularity')">
+      <span class="method GET">GET</span><span class="ep-name">/recommendations</span>
+    </div>
+    <div class="endpoint" onclick="loadEndpoint('recGenre')">
+      <span class="method GET">GET</span><span class="ep-name">/recommendations?genre</span>
+    </div>
+    <div class="endpoint" onclick="loadEndpoint('rateLimit')">
+      <span class="method GET">GET</span><span class="ep-name">Rate Limit Test</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="request-panel">
+      <div class="url-bar">
+        <select class="method-select" id="method">
+          <option>GET</option><option>POST</option>
+          <option>PUT</option><option>DELETE</option>
+        </select>
+        <input class="url-input" id="url" placeholder="http://localhost:3000/..." value="http://localhost:3000/health"/>
+        <div class="spinner" id="spinner"></div>
+        <button class="send-btn" id="sendBtn" onclick="sendRequest()">Send</button>
+      </div>
+      <div class="body-section" id="bodySection" style="display:none">
+        <label>Request Body (JSON)</label>
+        <textarea class="body-textarea" id="bodyInput" rows="4"></textarea>
+      </div>
+      <div id="rateLimitInfo" style="display:none">
+        <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#888;margin-top:6px">
+          <span>Rate Limit: <span id="rlUsed">0</span>/5 used this minute</span>
+          <span>Resets in <span id="rlReset">60</span>s</span>
+        </div>
+        <div class="rate-limit-bar"><div class="rate-limit-fill" id="rlBar" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="response-panel" id="responsePanel">
+      <div class="placeholder">
+        <div style="font-size:2rem;margin-bottom:12px">⚡</div>
+        Select an endpoint from the left and click <strong>Send</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = 'http://localhost:3000';
+let lastPlaylistId = null;
+let requestCount = 0;
+let windowStart = Date.now();
+let history = [];
+
+const endpoints = {
+  health:         { method:'GET',    url:'/health',                body:null },
+  createPlaylist: { method:'POST',   url:'/playlist',              body:'{\n  "name": "Postman Demo Playlist",\n  "ownerId": "user-demo",\n  "genres": ["Pop", "Jazz"]\n}' },
+  getPlaylist:    { method:'GET',    url:'/playlist/PLAYLIST_ID',  body:null },
+  updatePlaylist: { method:'PUT',    url:'/playlist/PLAYLIST_ID',  body:'{\n  "name": "Updated Playlist",\n  "genres": ["Rock"]\n}' },
+  deletePlaylist: { method:'DELETE', url:'/playlist/PLAYLIST_ID',  body:null },
+  recPopularity:  { method:'GET',    url:'/recommendations?type=popularity', body:null },
+  recGenre:       { method:'GET',    url:'/recommendations?type=genre&genres=Pop,Rock', body:null },
+  rateLimit:      { method:'GET',    url:'/recommendations?type=popularity', body:null },
+};
+
+function loadEndpoint(key) {
+  document.querySelectorAll('.endpoint').forEach(e => e.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  const ep = endpoints[key];
+  document.getElementById('method').value = ep.method;
+  let url = BASE + ep.url;
+  if (lastPlaylistId) url = url.replace('PLAYLIST_ID', lastPlaylistId);
+  document.getElementById('url').value = url;
+  const bodySection = document.getElementById('bodySection');
+  if (ep.body) {
+    bodySection.style.display = 'block';
+    document.getElementById('bodyInput').value = ep.body;
+  } else {
+    bodySection.style.display = 'none';
+  }
+  document.getElementById('rateLimitInfo').style.display = key === 'rateLimit' ? 'block' : 'none';
+}
+
+function syntaxHighlight(json) {
+  if (typeof json !== 'string') json = JSON.stringify(json, null, 2);
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+    let cls = 'num';
+    if (/^"/.test(match)) cls = /:$/.test(match) ? 'key' : 'str';
+    else if (/true|false/.test(match)) cls = 'bool';
+    else if (/null/.test(match)) cls = 'null';
+    return `<span class="${cls}">${match}</span>`;
+  });
+}
+
+async function sendRequest() {
+  const method = document.getElementById('method').value;
+  const url    = document.getElementById('url').value;
+  const body   = document.getElementById('bodyInput').value;
+  const btn    = document.getElementById('sendBtn');
+  const spin   = document.getElementById('spinner');
+
+  btn.disabled = true; spin.style.display = 'inline-block';
+
+  // Rate limit tracking
+  if (Date.now() - windowStart > 60000) { requestCount = 0; windowStart = Date.now(); }
+  requestCount++;
+  updateRLBar();
+
+  const start = Date.now();
+  let status, data, cacheHit = null;
+
+  try {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body && (method === 'POST' || method === 'PUT')) opts.body = body;
+    const res = await fetch(url, opts);
+    status = res.status;
+    const text = await res.text();
+    try { data = JSON.parse(text); } catch { data = text; }
+
+    // Extract playlist ID from POST response
+    if (method === 'POST' && status === 201 && data._id) {
+      lastPlaylistId = data._id;
+      document.getElementById('url').value = url;
+    }
+  } catch (e) {
+    status = 0; data = { error: 'Connection refused. Is the server running on port 3000?' };
+  }
+
+  const duration = Date.now() - start;
+  btn.disabled = false; spin.style.display = 'none';
+
+  // Determine cache status from timing heuristic
+  if (method === 'GET' && url.includes('/playlist/') && !url.includes('recommendations')) {
+    cacheHit = duration < 10;
+  }
+
+  renderResponse(status, data, duration, cacheHit, method, url);
+  addHistory(method, url, status, duration);
+}
+
+function updateRLBar() {
+  const pct = Math.min((requestCount / 5) * 100, 100);
+  document.getElementById('rlBar').style.width = pct + '%';
+  document.getElementById('rlBar').style.background = requestCount >= 5 ? '#f87171' : '#ff6b35';
+  document.getElementById('rlUsed').textContent = requestCount;
+}
+
+function getStatusClass(s) {
+  if (s >= 200 && s < 300) return s === 204 ? 's204' : (s === 201 ? 's201' : 's200');
+  if (s === 429) return 's429';
+  return 's500';
+}
+
+function renderResponse(status, data, duration, cacheHit, method, url) {
+  const sc = getStatusClass(status);
+  const statusText = {200:'OK',201:'Created',204:'No Content',429:'Too Many Requests',500:'Internal Server Error',0:'Connection Error'}[status] || '';
+  let cacheHtml = '';
+  if (cacheHit !== null) {
+    cacheHtml = `<span class="cache-badge ${cacheHit ? 'cache-hit' : 'cache-miss'}">${cacheHit ? '⚡ Cache HIT (Redis)' : '🔄 Cache MISS (MongoDB)'}</span>`;
+  }
+  const bodyHtml = status === 204 ? '<span style="color:#555">No Content</span>' :
+                   typeof data === 'object' ? syntaxHighlight(data) : data;
+
+  document.getElementById('responsePanel').innerHTML = `
+    <div class="info-row">
+      <span class="status-badge ${sc}">${status} ${statusText}</span>
+      <span class="time-badge">⏱ ${duration}ms</span>
+      ${cacheHtml}
+    </div>
+    <div style="font-size:0.78rem;color:#555;margin-bottom:12px">${method} ${url}</div>
+    <div class="response-body">${bodyHtml}</div>
+    ${history.length > 0 ? renderHistory() : ''}
+  `;
+}
+
+function addHistory(method, url, status, duration) {
+  history.unshift({ method, url: url.replace(BASE,''), status, duration, time: new Date().toLocaleTimeString() });
+  if (history.length > 6) history.pop();
+}
+
+function renderHistory() {
+  const items = history.slice(1).map(h => {
+    const sc = getStatusClass(h.status);
+    return `<div class="hist-item">
+      <span class="method ${h.method}" style="font-size:0.7rem;padding:2px 7px;border-radius:4px;font-weight:700">${h.method}</span>
+      <span style="flex:1;color:#aaa">${h.url}</span>
+      <span class="status-badge ${sc}" style="font-size:0.72rem;padding:2px 8px">${h.status}</span>
+      <span style="color:#555;font-size:0.75rem">${h.duration}ms</span>
+      <span style="color:#444;font-size:0.72rem">${h.time}</span>
+    </div>`;
+  }).join('');
+  return `<div class="history"><h4>Request History</h4>${items}</div>`;
+}
+
+// Check server health on load
+async function checkServer() {
+  const el = document.getElementById('serverStatus');
+  try {
+    const r = await fetch(BASE + '/health');
+    if (r.ok) { el.textContent = '🟢 Server Online'; el.style.background = '#1a4731'; el.style.color = '#4ade80'; }
+    else throw new Error();
+  } catch {
+    el.textContent = '🔴 Server Offline'; el.style.background = '#3d1a1a'; el.style.color = '#f87171';
+  }
+}
+
+checkServer();
+setInterval(checkServer, 10000);
+</script>
+</body>
+</html>

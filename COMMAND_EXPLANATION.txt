@@ -1,0 +1,496 @@
+================================================================================
+         PLAYLIST & RECOMMENDATION SERVICE — COMMAND EXPLANATION GUIDE
+         With Inline Comments, Theory & Distributed System Concepts
+================================================================================
+Date    : 2026-04-24
+Project : exp-7 (Playlist & Recommendation Service)
+Stack   : Node.js + Express + MongoDB + Redis
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1.  Health Check                      — GET /health
+2.  Create Playlist                   — POST /playlist
+3.  Set Variable                      — $id
+4.  Get Playlist (Cache MISS)         — GET /playlist/:id  [1st request]
+5.  Get Playlist (Cache HIT)          — GET /playlist/:id  [2nd request]
+6.  Redis Direct Inspection           — redis-cli get / ttl
+7.  Update Playlist (Observer fires)  — PUT /playlist/:id
+8.  Verify Cache Invalidation         — redis-cli get (returns nil)
+9.  Recommendations — Genre Strategy  — GET /recommendations?type=genre
+10. Rate Limiting Test                — Loop 6 requests → 429
+
+================================================================================
+1. HEALTH CHECK — GET /health
+================================================================================
+
+COMMAND (with inline comments):
+  Invoke-WebRequest                      # PowerShell HTTP client (alias: curl)
+    -Uri "http://localhost:3000/health"  # Target URL — /health endpoint
+    -UseBasicParsing                     # Skip IE HTML parser; avoids popup
+    | Select-Object                      # Pipe result to Select-Object filter
+      -ExpandProperty Content            # Extract only the JSON body string
+
+ACTUAL OUTPUT:
+  {"status":"OK"}
+
+EXPLANATION:
+  - This is a heartbeat/ping endpoint.
+  - Confirms the Express server is running and accepting requests.
+  - In production, load balancers and Kubernetes use this to decide
+    whether to send traffic to this instance.
+
+THEORY — SOLID (Single Responsibility Principle):
+  - /health has ONE job: report server status.
+  - It does not touch the database or cache.
+  - Each component does only what it is responsible for.
+
+STATUS CODE: 200 OK
+
+================================================================================
+2. CREATE A PLAYLIST — POST /playlist
+================================================================================
+
+COMMAND (with inline comments):
+  $body = '{"name":"My List","ownerId":"user1","genres":["Pop","Rock"]}'
+  # ^^ Store JSON payload in a variable (string format)
+  # Fields:
+  #   name     → playlist display name
+  #   ownerId  → which user owns this playlist
+  #   genres   → array of genre tags
+
+  Invoke-WebRequest                                # PowerShell HTTP client
+    -Uri "http://localhost:3000/playlist"          # POST to /playlist route
+    -Method POST                                   # HTTP verb = CREATE resource
+    -Body $body                                    # Attach JSON as request body
+    -ContentType "application/json"                # Tell server: body is JSON
+    -UseBasicParsing                               # Skip IE parser
+    | Select-Object -ExpandProperty Content        # Show only the JSON response
+
+ACTUAL OUTPUT:
+  {
+    "name"      : "My List",
+    "ownerId"   : "user1",
+    "songs"     : [],
+    "genres"    : ["Pop","Rock"],
+    "_id"       : "69ea8206c9f9879743d976c9",    ← MongoDB auto-generated ID
+    "createdAt" : "2026-04-23T20:33:10.017Z",   ← Mongoose timestamp
+    "updatedAt" : "2026-04-23T20:33:10.017Z",   ← Mongoose timestamp
+    "__v"       : 0                              ← Mongoose version key
+  }
+
+EXPLANATION:
+  - -Method POST    → HTTP method for CREATING a new resource.
+  - -Body $body     → Sends the JSON payload in the request body.
+  - -ContentType    → Sets the Content-Type header so server parses JSON.
+  - MongoDB assigns a unique _id (24-char hex ObjectId) automatically.
+  - createdAt/updatedAt are auto-managed by Mongoose { timestamps: true }.
+
+INTERNAL FLOW:
+  Request
+    → Rate Limiter (check: IP under 5 req/min?)
+    → PlaylistController.create()          [handles HTTP req/res only]
+    → PlaylistService.createPlaylist()     [business logic only]
+    → Playlist.save()                      [MongoDB write]
+    → playlistSubject.notify('CREATED')    [Observer notified]
+    → Response 201
+
+THEORY — REST API Design:
+  POST   → Create   → 201 Created
+  GET    → Read     → 200 OK
+  PUT    → Update   → 200 OK
+  DELETE → Delete   → 204 No Content
+
+STATUS CODE: 201 Created
+
+================================================================================
+3. SET VARIABLE — $id
+================================================================================
+
+COMMAND (with inline comments):
+  $id = "69ea8206c9f9879743d976c9"
+  # ^^ Store the playlist _id in a PowerShell variable
+  # This avoids retyping the 24-char ID in every command
+  # PowerShell expands $id inside double-quoted strings automatically:
+  #   "http://localhost:3000/playlist/$id"
+  #   → "http://localhost:3000/playlist/69ea8206c9f9879743d976c9"
+
+================================================================================
+4. GET PLAYLIST — FIRST REQUEST (Cache MISS)
+================================================================================
+
+COMMAND (with inline comments):
+  Invoke-WebRequest
+    -Uri "http://localhost:3000/playlist/$id"   # $id expands to real ID
+    -UseBasicParsing                             # Skip IE parser
+    | Select-Object -ExpandProperty Content      # Show only JSON body
+
+ACTUAL OUTPUT:
+  {"_id":"69ea8206...","name":"My List","ownerId":"user1",...}
+
+SERVER LOG (visible in the server terminal):
+  [INFO] Cache Miss for playlist:69ea8206c9f9879743d976c9   ← Redis returned nothing
+  [INFO] GET /playlist/69ea8206... - 200 [20ms]             ← Took 20ms (MongoDB)
+  [INFO] Cache Hit: false                                    ← Confirmed miss
+
+CACHE-ASIDE FLOW (on Cache MISS):
+  Step 1: redis.get('playlist:69ea8206...')  → returns NULL   (miss)
+  Step 2: Playlist.findById(id)              → query MongoDB  (~20ms)
+  Step 3: redis.set('playlist:...', data, 'EX', 3600)        → save to Redis
+  Step 4: Return data to client
+
+THEORY — Cache-Aside Strategy:
+  - Data is loaded into cache ONLY when first requested (lazy loading).
+  - Application manages all cache reads and writes itself.
+  - On cache miss: fetch DB → store in cache → return data.
+  - Avoids pre-loading unused data into cache (efficient memory use).
+
+STATUS CODE: 200 OK | Response time: ~20ms (MongoDB round-trip)
+
+================================================================================
+5. GET PLAYLIST — SECOND REQUEST (Cache HIT)
+================================================================================
+
+COMMAND (with inline comments):
+  Invoke-WebRequest
+    -Uri "http://localhost:3000/playlist/$id"   # Same URL as before
+    -UseBasicParsing
+    | Select-Object -ExpandProperty Content      # Same command — different result!
+
+ACTUAL OUTPUT:
+  (Identical JSON — but served 10x faster!)
+
+SERVER LOG (visible in the server terminal):
+  [INFO] Cache Hit for playlist:69ea8206c9f9879743d976c9    ← Redis returned data
+  [INFO] GET /playlist/69ea8206... - 200 [2ms]              ← Only 2ms! (Redis)
+  [INFO] Cache Hit: true                                     ← Confirmed hit
+
+CACHE-ASIDE FLOW (on Cache HIT):
+  Step 1: redis.get('playlist:69ea8206...')  → returns JSON  (hit!)
+  Step 2: Parse and return directly          → MongoDB NOT touched
+  Step 3: Response sent in ~2ms
+
+PERFORMANCE COMPARISON:
+  Cache MISS (MongoDB) : ~20ms
+  Cache HIT  (Redis)   : ~2ms
+  Speed improvement    : 10x faster ⚡
+
+THEORY — Redis Performance:
+  - Redis stores data in RAM (memory), not on disk.
+  - RAM access: ~100 nanoseconds vs disk: ~10 milliseconds.
+  - For 1000 concurrent users: 1 DB query + 999 Redis reads (not 1000 DB hits).
+  - This is how Instagram/Twitter serve millions of requests per second.
+
+STATUS CODE: 200 OK | Response time: ~2ms (Redis in-memory)
+
+================================================================================
+6. REDIS DIRECT INSPECTION — redis-cli
+================================================================================
+
+COMMAND A (with inline comments):
+  redis-cli                                      # Redis command-line interface
+    get                                          # GET command: fetch value by key
+    "playlist:69ea8206c9f9879743d976c9"         # Key format: "playlist:<_id>"
+
+ACTUAL OUTPUT:
+  "{\"_id\":\"69ea8206...\",\"name\":\"My List\",
+   \"ownerId\":\"user1\",\"genres\":[\"Pop\",\"Rock\"],...}"
+  # ^^ The full playlist JSON stored as a string in Redis memory
+
+EXPLANATION:
+  - Key naming: "playlist:<id>" is a namespace convention.
+    Prevents collisions with other keys like "user:123" or "song:456".
+  - Value: JSON.stringify(playlist) — serialized to string for storage.
+  - redis-cli connects directly to Redis on localhost:6379.
+
+--------------------------------------------------------------------------------
+
+COMMAND B (with inline comments):
+  redis-cli
+    ttl                                          # TTL command: Time To Live
+    "playlist:69ea8206c9f9879743d976c9"         # Same key as above
+
+ACTUAL OUTPUT:
+  (integer) 3425
+  # ^^ 3425 seconds remaining before auto-expiry (~57 minutes)
+  # Set to 3600 seconds (1 hour) when first cached
+
+EXPLANATION:
+  - TTL = how many seconds before Redis auto-deletes this key.
+  - Set using: redis.set(key, value, 'EX', 3600) — 'EX' means expire.
+  - When TTL reaches 0: Redis deletes the key automatically.
+  - Prevents serving outdated data forever (stale cache).
+  - TTL = -1 means key never expires. TTL = -2 means key doesn't exist.
+
+THEORY — Cache Expiration:
+  - TTL is essential to prevent "cache poisoning" (stale data forever).
+  - Choose TTL based on how often data changes:
+    * Rarely changing (product names): long TTL (hours or days)
+    * Often changing (prices, stock):  short TTL (seconds/minutes)
+    * User playlist data:              medium TTL (1 hour used here)
+
+================================================================================
+7. UPDATE PLAYLIST — PUT /playlist/:id (Observer Pattern!)
+================================================================================
+
+COMMAND (with inline comments):
+  $body2 = '{"name":"Updated My List","genres":["Jazz"]}'
+  # ^^ New JSON payload — only the fields we want to update
+
+  Invoke-WebRequest
+    -Uri "http://localhost:3000/playlist/$id"       # Same playlist by ID
+    -Method PUT                                     # HTTP verb = UPDATE resource
+    -Body $body2                                    # New data to apply
+    -ContentType "application/json"                 # Body is JSON format
+    -UseBasicParsing
+    | Select-Object -ExpandProperty Content         # Show response body
+
+ACTUAL OUTPUT:
+  {
+    "_id"       : "69ea8206c9f9879743d976c9",
+    "name"      : "Updated My List",              ← Name changed ✅
+    "ownerId"   : "user1",
+    "songs"     : [],
+    "genres"    : ["Jazz"],                        ← Genre changed ✅
+    "createdAt" : "2026-04-23T20:33:10.017Z",
+    "updatedAt" : "2026-04-23T20:37:41.381Z",     ← Updated timestamp ✅
+    "__v"       : 0
+  }
+
+SERVER LOG (visible in server terminal):
+  [INFO] Cache invalidated for playlist:69ea8206c9f9879743d976c9
+  # ^^ CacheInvalidator observer automatically fired!
+
+OBSERVER PATTERN FLOW:
+  PUT request received
+    → PlaylistService.updatePlaylist(id, data)
+    → Playlist.findByIdAndUpdate(id, data)         [MongoDB updated]
+    → playlistSubject.notify('PLAYLIST_UPDATED', playlist)
+    → PlaylistSubject loops through observers[]
+    → CacheInvalidator.update('PLAYLIST_UPDATED', data)
+    → redis.del('playlist:69ea8206...')            [Redis key deleted!]
+
+THEORY — Observer Design Pattern:
+  - Subject (PlaylistSubject): maintains a list of observers, notifies all.
+  - Observer (CacheInvalidator): reacts to events from the subject.
+  - Decoupled: PlaylistService does NOT directly call Redis.del().
+    It only says "something happened" and observers decide what to do.
+  - Open/Closed Principle (SOLID):
+    * Add new observers (e.g., EmailNotifier, LogAudit) without
+      changing PlaylistService code at all.
+
+STATUS CODE: 200 OK
+
+================================================================================
+8. VERIFY CACHE INVALIDATION — redis-cli get → (nil)
+================================================================================
+
+COMMAND (with inline comments):
+  redis-cli
+    get                                            # Fetch value by key
+    "playlist:69ea8206c9f9879743d976c9"           # The key we cached earlier
+
+ACTUAL OUTPUT:
+  (nil)
+  # ^^ Key does NOT exist in Redis anymore
+  # CacheInvalidator successfully deleted it after PUT request
+
+EXPLANATION:
+  - (nil) = key not found in Redis.
+  - The Observer (CacheInvalidator) called redis.del(key) after the update.
+  - If we now do GET /playlist/:id again → it will be a Cache MISS.
+  - MongoDB will be queried → returns UPDATED data ("Updated My List").
+  - The fresh data gets stored in Redis again with a new 1-hour TTL.
+  - This ensures clients NEVER receive stale/outdated cached data.
+
+THEORY — Data Consistency in Distributed Systems:
+  - "Cache consistency" is one of the hardest problems in distributed computing.
+  - Cache Invalidation solves it by: delete stale cache on every write.
+  - Alternative: Write-Through Cache (update cache AND DB together on write).
+  - Our approach (invalidate on write + repopulate on next read) is simpler
+    and safe — at the cost of one extra DB call after each update.
+
+================================================================================
+9. RECOMMENDATIONS — GENRE STRATEGY
+================================================================================
+
+COMMAND (with inline comments):
+  Invoke-WebRequest
+    -Uri "http://localhost:3000/recommendations   # Recommendations endpoint
+          ?type=genre                             # Query param: choose strategy
+          &genres=Pop,Rock"                       # Query param: filter by genres
+    -UseBasicParsing
+    | Select-Object -ExpandProperty Content
+
+ACTUAL OUTPUT:
+  [
+    {"title":"Blinding Lights",    "artist":"The Weeknd",   "genre":"Pop",  "popularity":95},
+    {"title":"Bohemian Rhapsody",  "artist":"Queen",        "genre":"Rock", "popularity":98},
+    {"title":"Levitating",         "artist":"Dua Lipa",     "genre":"Pop",  "popularity":90},
+    {"title":"Stairway to Heaven", "artist":"Led Zeppelin", "genre":"Rock", "popularity":97}
+  ]
+
+STRATEGY PATTERN FLOW INTERNALLY:
+  GET /recommendations?type=genre&genres=Pop,Rock
+    → RecommendationController.get(req, res)
+    → RecommendationService.getRecommendations('genre', {genres:['Pop','Rock']})
+    → switch(type) → case 'genre':
+    → context.setStrategy(new GenreStrategy())    ← strategy set at RUNTIME
+    → context.getRecommendations({genres, limit})
+    → GenreStrategy.recommend()
+    → Song.find({ genre: { $in: ['Pop','Rock'] } }).limit(5)  ← MongoDB query
+    → Return results to client
+
+QUERY PARAMS EXPLAINED:
+  ?type=genre       → selects GenreStrategy algorithm
+  &genres=Pop,Rock  → passed to GenreStrategy.recommend({ genres: ['Pop','Rock'] })
+  &limit=5          → optional, defaults to 5
+
+AVAILABLE STRATEGIES:
+  type=genre       → GenreStrategy      : filter by genre ($in MongoDB query)
+  type=popularity  → PopularityStrategy : sort by popularity descending
+  (extensible)     → UserHistoryStrategy: can be added without changing context
+
+THEORY — Strategy Design Pattern:
+  - Defines a family of algorithms (Genre, Popularity, UserHistory).
+  - Each algorithm is encapsulated in its own class.
+  - They are interchangeable through a common interface (recommend() method).
+  - The client (RecommendationService) selects the strategy at runtime.
+  - Benefits:
+    * No giant if-else chains.
+    * Each strategy is independently testable.
+    * New strategies added without modifying existing code (Open/Closed).
+
+STATUS CODE: 200 OK
+
+================================================================================
+10. RATE LIMITING TEST — 429 Too Many Requests
+================================================================================
+
+COMMAND (with inline comments):
+  for ($i=1; $i -le 6; $i++) {           # Loop 6 times (limit is 5/min)
+      try {
+          $r = Invoke-WebRequest          # Attempt the HTTP request
+            -Uri "http://localhost:3000/recommendations"
+            -UseBasicParsing
+          Write-Host                     # Print result to console
+            "Request $i => $($r.StatusCode) OK"
+      } catch {
+          # PowerShell throws exception for non-2xx responses (like 429)
+          Write-Host
+            "Request $i => 429 TOO MANY REQUESTS !!!"
+      }
+  }
+
+ACTUAL OUTPUT:
+  Request 1 => 200 OK
+  Request 2 => 200 OK
+  Request 3 => 200 OK
+  Request 4 => 429 TOO MANY REQUESTS !!!    ← Rate limit hit
+  Request 5 => 429 TOO MANY REQUESTS !!!    ← Still blocked
+  Request 6 => 429 TOO MANY REQUESTS !!!    ← Still blocked
+
+NOTE: Blocked at request 4 (not 6) because earlier commands in this
+session already consumed 2 of the 5 allowed slots in the current minute.
+
+RATE LIMITER CONFIGURATION (src/middleware/rateLimiter.js):
+  windowMs : 60 * 1000    # 1 minute sliding window
+  max      : 5            # Max 5 requests per IP per window
+  message  : {
+    status  : 429,
+    error   : "Too Many Requests",
+    message : "You have exceeded the 5 requests per minute limit."
+  }
+
+RESPONSE HEADERS SENT ON EVERY REQUEST:
+  RateLimit-Policy   : 5;w=60    # 5 requests per 60-second window
+  RateLimit-Limit    : 5         # Maximum allowed per window
+  RateLimit-Remaining: 4         # How many requests left this window
+  RateLimit-Reset    : 60        # Seconds until the window resets
+
+SERVER LOG (when rate limit exceeded):
+  [WARN] Rate limit exceeded by IP: ::1
+  # ::1 = IPv6 loopback = localhost (127.0.0.1)
+
+INTERNAL FLOW:
+  Request arrives
+    → rateLimiter middleware executes FIRST (before any route)
+    → Check: how many requests from this IP in last 60 seconds?
+    → If count <= 5 : allow → pass to next middleware → route handler
+    → If count >  5 : block → send 429 immediately (route never called)
+
+THEORY — Rate Limiting Algorithms:
+  1. Fixed Window Counter  : count resets at fixed intervals (used here)
+                             Simple but can allow 2x burst at window edges.
+  2. Sliding Window Log    : tracks exact timestamps — precise but memory heavy.
+  3. Token Bucket          : tokens added at fixed rate, consumed per request.
+                             Allows controlled bursting (used by AWS API Gateway).
+  4. Leaky Bucket          : processes requests at constant rate, queues excess.
+                             Used for smooth traffic shaping.
+
+WHY RATE LIMITING MATTERS:
+  - Prevents DoS/DDoS attacks (flood of requests crashing the server).
+  - Ensures fair resource usage among all clients.
+  - Protects backend services (MongoDB, Redis) from overload.
+  - Enforces SLA (Service Level Agreement) tiers for paid plans.
+
+IN PRODUCTION:
+  - Rate limit state must be stored in Redis (not in-memory) so that all
+    server instances share the same counters across the cluster.
+  - Use ioredis store with express-rate-limit for distributed rate limiting.
+
+STATUS CODE: 429 Too Many Requests
+
+================================================================================
+FULL SYSTEM SUMMARY
+================================================================================
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ COMMAND                        │ STATUS │ CONCEPT DEMONSTRATED              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ GET /health                    │  200   │ REST API, Health Check            │
+│ POST /playlist                 │  201   │ REST Create, MongoDB insert        │
+│ $id = "..."                    │   —    │ PowerShell variable reuse         │
+│ GET /playlist/:id  (1st call)  │  200   │ Cache-Aside MISS, MongoDB fetch   │
+│ GET /playlist/:id  (2nd call)  │  200   │ Cache-Aside HIT, Redis 2ms        │
+│ redis-cli get                  │   —    │ Redis key inspection              │
+│ redis-cli ttl                  │   —    │ TTL / expiry verification         │
+│ PUT /playlist/:id              │  200   │ Update + Observer + Cache delete  │
+│ redis-cli get → (nil)          │   —    │ Cache Invalidation confirmed      │
+│ GET /recommendations?genre     │  200   │ Strategy Pattern (GenreStrategy)  │
+│ Loop 6x GET /recommendations   │  429   │ Rate Limiting enforced            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+DESIGN PATTERNS DEMONSTRATED:
+  ✅ Strategy Pattern  — Recommendation engine (genre / popularity algorithms)
+  ✅ Observer Pattern  — Cache invalidation on playlist update/delete
+  ✅ SOLID Principles  — Separate controllers, services, strategies, observers
+
+DISTRIBUTED SYSTEM CONCEPTS DEMONSTRATED:
+  ✅ Cache-Aside (Lazy Loading) Strategy
+  ✅ Redis TTL-based cache expiration
+  ✅ Cache invalidation on write
+  ✅ API-level rate limiting (Fixed Window Counter)
+  ✅ Request observability (response time, cache hit/miss logging)
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+# 1. Go to project folder
+cd C:\Users\Lenovo\Downloads\exp-7
+# 2. Install all packages (only needed once)
+npm install
+# 3. Check MongoDB is running
+netstat -ano | findstr :27017
+# ✅ Must see: LISTENING on port 27017
+# 4. Check Redis is running
+redis-cli ping
+# ✅ Must see: PONG
+# 5. Seed database with songs & playlist (only needed once)
+npm run seed
+# 6. Start the server
+npm start
+
+
+#
+http://localhost:3000/tester

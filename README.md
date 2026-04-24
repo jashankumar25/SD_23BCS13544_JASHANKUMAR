@@ -1,81 +1,250 @@
-# 🏗️ System Design Experiments Collection
+# 🎵 Scalable Playlist & Recommendation Service
 
-![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=java&logoColor=white) 
-![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white)
-![System Design](https://img.shields.io/badge/System_Design-00599c?style=for-the-badge)
-![Load Balancing](https://img.shields.io/badge/Load_Balancing-8B5CF6?style=for-the-badge)
-![Concurrency](https://img.shields.io/badge/Concurrency-10B981?style=for-the-badge)
+> A **production-inspired backend system** demonstrating real-world distributed system concepts used by platforms like **Netflix** and **Spotify**.
 
-Welcome to the **System Design Experiments Collection**! This repository is a curated suite of projects built from the ground up to explore, implement, and test core software engineering principles, system architecture patterns, and DevOps networking concepts.
-
-Everything in this repository is built natively with core Java (no heavy abstractions like Spring Boot) to provide a deep, foundational understanding of how these systems work under the hood.
+Implements **playlist management**, **dynamic recommendations**, **Redis caching**, and **API rate limiting** with a strong focus on **scalability, performance, and clean architecture**.
 
 ---
 
-## 📂 Experiments Overview
+## 🚀 Features
 
-### 🎟️ [Experiment 2: Object-Oriented Movie Ticket Booking System](./Experiment2_MovieTicketBooking)
-**Focus:** *Object-Oriented Design, Classes, Relationships (Association, Aggregation, Composition).*
-- Implements a foundational Movie Ticket Booking System.
-- Manages movies, shows, seats, and bookings.
-- Demonstrates structural relationships between domains through clean Java code.
-
-### 🎬 [Experiment 3: Movie Ticket Booking](./Experiment3_MovieTicketBooking)
-**Focus:** *Concurrency, Domain Modeling, and Object-Oriented Design.*
-- Simulates a theater booking platform.
-- Focuses on concurrent execution patterns to prevent race conditions during ticket reservation.
-- Employs SOLID principles and appropriate Design Patterns to ensure highly cohesive and decoupled modules.
-
-### 🎵 [Experiment 4: Music Streaming Service](./Experiment4_MusicStreaming)
-**Focus:** *State Management, Strategy Patterns, and Core Logic Execution.*
-- A backend simulation of a complex music streaming service.
-- Handles playlist queues, continuous playback functionalities, and different streaming strategies.
-- Implements the Strategy Pattern dynamically for tasks like song recommendations.
-
-### 🌐 [Experiment 5: Network Request Flow Simulation](./Experiment5_NetworkSimulation)
-**Focus:** *Network Lifecycle, Packet Simulation, and Request Parsing.*
-- Simulates how a network request travels through the OSI layers to a server and back.
-- Focuses on packet creation, routing simulation, and tracking network lifecycle states.
-- Great for understanding the absolute fundamentals of network IO.
-
-### 🚀 [Experiment 6: Playlist REST API & Nginx Load Balancing](./Experiment6_PlaylistREST_API)
-**Focus:** *RESTful Architecture, Load Balancing (Round-Robin), Rate-Limiting, CORS, and UI Dashboards.*
-- Contains a fully functional, container-less Java HTTP REST API.
-- Implements custom **Rate Limiting** logic protecting the API against DDoS bursts.
-- Utilizes an **Nginx Reverse Proxy** (`/NginxExperiment/`) to dynamically balance incoming traffic across multiple instances of the backend servers running on different ports (3000 & 3001).
-- Includes a stunning Glassmorphism **HTML5 Dashboard** that calculates true network throughput dynamically and visually maps Nginx traffic distribution in real-time.
-- Features a one-click automated `.bat` script that compiles Java, controls Nginx nodes, handles API lifecycle, and boots the analytics dashboard.
+| Feature | Description |
+|---------|-------------|
+| ✅ Playlist CRUD | Create, Read, Update, Delete via REST APIs |
+| 🎯 Recommendations | Genre-based & Popularity-based strategies |
+| ⚡ Redis Caching | Cache-Aside strategy — 10x faster reads |
+| 🚦 Rate Limiting | 5 requests/min per user (429 on exceed) |
+| 🔄 Cache Invalidation | Observer pattern auto-clears cache on update |
+| 📊 Metrics Logging | Request time, cache hit/miss, error tracking |
 
 ---
 
-## 🛠️ Technology Stack
+## 🏗️ System Architecture
 
-- **Backend Logic:** Core Java 11+
-- **Reverse Proxy / Server Load-Balancing:** Nginx
-- **Frontend / Telemetry Analysis:** Vanilla HTML5, CSS3, JavaScript (Fetch API/Promises)
-- **Deployment & Automation:** Windows Command Scripts (`.bat`)
+```
+CLIENT (Browser / Postman / PowerShell)
+        ↓
+MIDDLEWARE (Rate Limiter + Metrics Logger)
+        ↓
+ROUTES → CONTROLLERS → SERVICES
+        ↓                ↓
+     MongoDB          Redis Cache
+   (persistent)      (in-memory)
+```
 
-## 🚀 How to Run
+---
 
-Each experiment folder contains its own source code and execution scripts. 
-For example, to launch the full-stack load balancing visualizer in **Experiment 6**:
+## 📂 Project Structure
 
-1. Open your terminal.
-2. Navigate into the respective experiment directory:
-   ```cmd
-   cd Experiment6_PlaylistREST_API
-   ```
-3. Run the automation batch file:
-   ```cmd
-   run_experiment6.bat
-   ```
-*(Make sure Nginx is configured in your local environment prior to executing proxy-based experiments).*
+```
+exp-7/
+├── server.js                   ← Entry point
+├── .env                        ← Environment config
+├── api-tester.html             ← Browser-based API tester UI
+├── src/
+│   ├── config/
+│   │   ├── db.js               ← MongoDB connection
+│   │   └── redis.js            ← Redis connection
+│   ├── models/
+│   │   └── Playlist.js         ← Song & Playlist schemas
+│   ├── middleware/
+│   │   ├── rateLimiter.js      ← 5 req/min enforcer
+│   │   └── metrics.js          ← Response time & cache logging
+│   ├── services/
+│   │   ├── PlaylistService.js  ← Cache-Aside logic
+│   │   └── RecommendationService.js
+│   ├── strategies/
+│   │   ├── GenreStrategy.js    ← Filter by genre
+│   │   ├── PopularityStrategy.js ← Sort by popularity
+│   │   └── RecommendationContext.js ← Strategy switcher
+│   ├── observers/
+│   │   ├── PlaylistSubject.js  ← Event publisher
+│   │   └── CacheInvalidator.js ← Auto-deletes Redis key
+│   ├── controllers/
+│   │   ├── PlaylistController.js
+│   │   └── RecommendationController.js
+│   ├── routes/
+│   │   ├── playlistRoutes.js
+│   │   └── recommendationRoutes.js
+│   └── utils/
+│       ├── logger.js
+│       └── seed.js             ← Sample data seeder
+```
 
-## 👤 Author
+---
 
-Developed by **Jashan Kumar** ([@jashankumar25](https://github.com/jashankumar25))
+## 🧠 Design Patterns
+
+### 1. Strategy Pattern — Dynamic Recommendations
+
+Switch algorithms at runtime without changing the controller:
+
+```
+GET /recommendations?type=genre&genres=Pop,Rock  → GenreStrategy
+GET /recommendations?type=popularity             → PopularityStrategy
+```
+
+### 2. Observer Pattern — Automatic Cache Invalidation
+
+```
+PUT /playlist/:id
+  → MongoDB updated
+  → PlaylistSubject.notify('PLAYLIST_UPDATED')
+  → CacheInvalidator.update()     ← fires automatically
+  → redis.del('playlist:<id>')    ← stale cache deleted
+```
+
+### 3. SOLID Principles
+
+| Principle | Applied |
+|-----------|---------|
+| **Single Responsibility** | Controller handles HTTP; Service handles logic |
+| **Open/Closed** | Add new strategies without touching existing code |
+| **Dependency Inversion** | Services use abstractions, not concrete classes |
+
+---
+
+## ⚡ Performance — Cache-Aside Strategy
+
+```
+GET /playlist/:id
+
+  ┌─ Check Redis ──────────────────────────────┐
+  │   HIT  → return data in ~2ms  ⚡           │
+  │   MISS → query MongoDB (~20ms)             │
+  │          → store in Redis (TTL: 1 hour)    │
+  │          → return data                     │
+  └────────────────────────────────────────────┘
+```
+
+**Result: 10x faster on repeated reads**
+
+---
+
+## 🔌 API Endpoints
+
+| Method | Endpoint | Description | Status |
+|--------|----------|-------------|--------|
+| GET | `/health` | Server health check | 200 |
+| POST | `/playlist` | Create a playlist | 201 |
+| GET | `/playlist/:id` | Get playlist (cached) | 200 |
+| PUT | `/playlist/:id` | Update + invalidate cache | 200 |
+| DELETE | `/playlist/:id` | Delete + clear cache | 204 |
+| GET | `/recommendations?type=popularity` | Top songs | 200 |
+| GET | `/recommendations?type=genre&genres=Pop` | Genre filter | 200 |
+
+---
+
+## 🧪 Live Demo Results
+
+All endpoints tested and verified:
+
+| # | Request | Status | Result |
+|---|---------|--------|--------|
+| 1 | `GET /health` | `200 OK` | `{"status":"OK"}` |
+| 2 | `POST /playlist` | `201 Created` | Playlist saved to MongoDB with `_id` |
+| 3 | `GET /playlist/:id` *(1st)* | `200 OK` | 🔄 Cache MISS — MongoDB fetch (~15ms) |
+| 4 | `GET /playlist/:id` *(2nd)* | `200 OK` | ⚡ Cache HIT — Redis served (~2ms) |
+| 5 | `PUT /playlist/:id` | `200 OK` | Updated + Observer cleared Redis cache |
+| 6 | `GET /recommendations?popularity` | `200 OK` | Songs sorted by score |
+| 7 | `GET /recommendations?genre` | `200 OK` | Pop & Rock songs filtered |
+| 8 | Rate limit (6 rapid requests) | `429` | `"You have exceeded the 5 requests per minute limit."` |
+| 9 | `DELETE /playlist/:id` | `204` | Deleted + cache cleared |
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js v24 |
+| Framework | Express.js |
+| Database | MongoDB + Mongoose |
+| Cache | Redis + ioredis |
+| Rate Limiting | express-rate-limit |
+
+---
+
+## ⚙️ Setup & Installation
+
+### Prerequisites
+Make sure these are running:
+```
+MongoDB  → port 27017
+Redis    → port 6379
+```
+
+### Quick Start
+
+```powershell
+# 1. Install packages
+npm install
+
+# 2. Seed the database (once only)
+npm run seed
+
+# 3. Start server
+npm start
+```
+
+**Server live at → `http://localhost:3000`**
+**API Tester UI → `http://localhost:3000/tester`**
+
+### Environment Variables (`.env`)
+
+```env
+PORT=3000
+MONGODB_URI=mongodb://localhost:27017/playlist_service
+REDIS_URL=redis://localhost:6379
+NODE_ENV=development
+```
+
+---
+
+## 🧪 Test with PowerShell
+
+```powershell
+# Health Check
+Invoke-WebRequest -Uri "http://localhost:3000/health" -UseBasicParsing | Select-Object -ExpandProperty Content
+
+# Create Playlist
+$body = '{"name":"My Playlist","ownerId":"user1","genres":["Pop","Rock"]}'
+Invoke-WebRequest -Uri "http://localhost:3000/playlist" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing | Select-Object -ExpandProperty Content
+
+# Get Recommendations
+Invoke-WebRequest -Uri "http://localhost:3000/recommendations?type=popularity" -UseBasicParsing | Select-Object -ExpandProperty Content
+```
+
+Or import **`Playlist-Service.postman_collection.json`** into Postman for the full collection with auto-test scripts.
+
+---
+
+## 🌟 Key Highlights
+
+- 🔥 Real-world backend architecture with layered design
+- ⚡ Redis cache gives **10x faster** reads on repeated requests
+- 🧠 **Strategy + Observer** design patterns in production style
+- 🚀 Stateless, scalable REST API — load balancer ready
+
+---
+
+## 🔮 Future Improvements
+
+- 🔐 JWT Authentication & Authorization
+- 📦 Docker + Kubernetes deployment
+- 📡 Kafka for async event processing
+- 🤖 ML-based personalized recommendations
+- 📄 Pagination for large datasets
+
+---
+
+## 👨‍💻 Author
+
+**Jashan Kumar**
+B.Tech CSE | Backend & System Design Enthusiast
+
+---
 
 ## 📜 License
 
-This system design repository and its internal experiment modules are licensed under the MIT License.
-"# SD_23BCS13544_JASHANKUMAR" 
+MIT License
